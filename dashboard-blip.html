@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Funil de Mensagens — Clubbi CRM</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1:      #fcfcfb;
+    --page-plane:     #f9f9f7;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --gridline:       #e1e0d9;
+    --baseline:       #c3c2b7;
+    --border:         rgba(11,11,11,0.10);
+    --series-1:       #2a78d6;
+    --series-1-soft:  #cde2fb;
+    --status-good:    #0ca30c;
+    --status-critical:#d03b3b;
+    --status-muted:   #898781;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --surface-1:      #1a1a19;
+      --page-plane:     #0d0d0d;
+      --text-primary:   #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted:     #898781;
+      --gridline:       #2c2c2a;
+      --baseline:       #383835;
+      --border:         rgba(255,255,255,0.10);
+      --series-1:       #3987e5;
+      --series-1-soft:  #184f95;
+      --status-good:    #0ca30c;
+      --status-critical:#e66767;
+      --status-muted:   #898781;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--page-plane);
+    color: var(--text-primary);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  body { padding: 20px 16px 60px; }
+  .wrap { max-width: 1180px; margin: 0 auto; }
+
+  header.page-head { margin-bottom: 20px; }
+  header.page-head h1 { font-size: 22px; font-weight: 700; margin: 0 0 4px; }
+  header.page-head p { margin: 0; color: var(--text-secondary); font-size: 14px; }
+  header.page-head .meta { margin-top: 8px; font-size: 12px; color: var(--text-muted); }
+
+  .card {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+  }
+
+  /* Filters */
+  .filters {
+    display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end;
+    margin-bottom: 20px;
+  }
+  .filter-field { display: flex; flex-direction: column; gap: 4px; }
+  .filter-field label { font-size: 12px; color: var(--text-secondary); font-weight: 600; }
+  .filter-field input[type=date] {
+    font: inherit; font-size: 13px; padding: 7px 8px; border-radius: 8px;
+    border: 1px solid var(--baseline); background: var(--surface-1); color: var(--text-primary);
+  }
+  .date-range { display: flex; gap: 8px; align-items: center; }
+  .date-range span { color: var(--text-muted); font-size: 12px; }
+
+  .combo { position: relative; }
+  .combo-btn {
+    font: inherit; font-size: 13px; padding: 7px 12px; border-radius: 8px;
+    border: 1px solid var(--baseline); background: var(--surface-1); color: var(--text-primary);
+    cursor: pointer; min-width: 190px; text-align: left; display: flex; justify-content: space-between; gap: 8px;
+  }
+  .combo-btn:hover { border-color: var(--text-secondary); }
+  .combo-btn .chev { color: var(--text-muted); font-size: 11px; }
+  .combo-panel {
+    display: none; position: absolute; top: calc(100% + 4px); left: 0; z-index: 20;
+    width: 280px; max-height: 320px; overflow: auto;
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.18); padding: 8px;
+  }
+  .combo-panel.open { display: block; }
+  .combo-search {
+    width: 100%; font: inherit; font-size: 13px; padding: 6px 8px; margin-bottom: 6px;
+    border-radius: 6px; border: 1px solid var(--baseline); background: var(--page-plane); color: var(--text-primary);
+  }
+  .combo-actions { display: flex; gap: 8px; margin-bottom: 6px; }
+  .combo-actions button {
+    font: inherit; font-size: 11px; padding: 3px 8px; border-radius: 6px;
+    border: 1px solid var(--baseline); background: transparent; color: var(--text-secondary); cursor: pointer;
+  }
+  .combo-actions button:hover { color: var(--text-primary); border-color: var(--text-secondary); }
+  .combo-option { display: flex; align-items: center; gap: 8px; padding: 5px 4px; font-size: 13px; border-radius: 6px; cursor: pointer; }
+  .combo-option:hover { background: var(--page-plane); }
+  .combo-option input { accent-color: var(--series-1); }
+  .combo-option .count { margin-left: auto; color: var(--text-muted); font-size: 11px; }
+
+  .clear-btn {
+    font: inherit; font-size: 13px; padding: 7px 14px; border-radius: 8px;
+    border: 1px solid var(--baseline); background: transparent; color: var(--text-secondary); cursor: pointer;
+  }
+  .clear-btn:hover { color: var(--text-primary); border-color: var(--text-secondary); }
+
+  /* KPI cards */
+  .kpi-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; margin-bottom: 20px; }
+  @media (max-width: 900px) { .kpi-row { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 520px) { .kpi-row { grid-template-columns: 1fr; } }
+  .kpi { padding: 16px 18px; }
+  .kpi-label { font-size: 13px; color: var(--text-secondary); font-weight: 600; }
+  .kpi-value { font-size: 28px; font-weight: 700; margin-top: 6px; letter-spacing: -0.02em; }
+  .kpi-sub { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+  .kpi-sub.up { color: var(--status-good); }
+  .kpi-sub.down { color: var(--status-critical); }
+  .kpi.is-fail .kpi-value { color: var(--status-critical); }
+
+  /* Funnel */
+  .section { margin-bottom: 20px; }
+  .section h2 { font-size: 16px; margin: 0 0 2px; }
+  .section .cap { font-size: 13px; color: var(--text-secondary); margin: 0 0 18px; }
+  .funnel-row { display: grid; grid-template-columns: 110px 1fr; align-items: center; gap: 12px; margin-bottom: 10px; }
+  .funnel-row .stage-label { font-size: 13px; color: var(--text-secondary); text-align: right; }
+  .funnel-track { background: var(--page-plane); border-radius: 8px; height: 46px; position: relative; overflow: hidden; }
+  .funnel-bar {
+    height: 100%; background: var(--series-1); border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-weight: 700; font-size: 14px;
+    transition: width .4s ease; min-width: 46px;
+  }
+
+  /* Table */
+  table.err-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.err-table th {
+    text-align: left; font-size: 12px; color: var(--text-secondary); font-weight: 600;
+    padding: 8px 10px; border-bottom: 1px solid var(--gridline);
+    cursor: pointer; user-select: none; white-space: nowrap;
+  }
+  table.err-table th .arrow { color: var(--text-muted); font-size: 10px; margin-left: 4px; }
+  table.err-table td { padding: 10px; border-bottom: 1px solid var(--gridline); vertical-align: top; }
+  table.err-table td.desc { color: var(--text-primary); max-width: 520px; }
+  table.err-table td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .pct-cell { display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .dot.crit { background: var(--status-critical); }
+  .dot.muted { background: var(--status-muted); }
+
+  .table-foot { display: flex; align-items: center; justify-content: space-between; margin-top: 12px; flex-wrap: wrap; gap: 10px; }
+  .per-page { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-secondary); }
+  .per-page select {
+    font: inherit; font-size: 12px; padding: 3px 6px; border-radius: 6px;
+    border: 1px solid var(--baseline); background: var(--surface-1); color: var(--text-primary);
+  }
+  .range-info { font-size: 12px; color: var(--text-muted); }
+  .pager { display: flex; gap: 4px; }
+  .pager button {
+    font: inherit; font-size: 12px; width: 26px; height: 26px; border-radius: 6px;
+    border: 1px solid var(--baseline); background: var(--surface-1); color: var(--text-secondary); cursor: pointer;
+  }
+  .pager button:disabled { opacity: .4; cursor: default; }
+  .pager button:not(:disabled):hover { color: var(--text-primary); border-color: var(--text-secondary); }
+
+  .empty-state { padding: 40px 20px; text-align: center; color: var(--text-muted); font-size: 13px; }
+
+  /* Preset buttons */
+  .preset-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  .preset-btn {
+    font: inherit; font-size: 11px; padding: 4px 10px; border-radius: 999px;
+    border: 1px solid var(--baseline); background: transparent; color: var(--text-secondary); cursor: pointer;
+  }
+  .preset-btn:hover { border-color: var(--text-secondary); color: var(--text-primary); }
+  .preset-btn.active { background: var(--series-1); border-color: var(--series-1); color: #fff; }
+
+  /* Load banner (fallback when the CSV can't be fetched automatically) */
+  .load-banner { display: none; border: 1px solid var(--status-critical); margin-bottom: 20px; }
+  .load-banner.show { display: block; }
+  .load-banner strong { display: block; margin-bottom: 6px; }
+  .load-banner p { margin: 6px 0; font-size: 13px; color: var(--text-secondary); }
+  .load-banner code { background: var(--page-plane); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+  .load-banner .file-row { margin-top: 10px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .load-banner input[type=file] { font-size: 13px; color: var(--text-secondary); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="page-head">
+    <h1>Funil de Mensagens — Clubbi CRM (Blip)</h1>
+    <p>Entenda o desempenho do funil de mensagens ativas e monitore erros de envio ao longo do período.</p>
+    <div class="meta" id="meta-info">Carregando dados…</div>
+  </header>
+
+  <div class="card load-banner" id="load-banner">
+    <strong>Não foi possível carregar data/notifications.csv automaticamente.</strong>
+    <p>Isso é esperado se você abriu este arquivo direto no navegador (endereço começando com <code>file://</code>) — por segurança, os navegadores bloqueiam esse tipo de leitura de arquivo local. Publique a pasta no GitHub Pages, rode um servidor local (<code>python3 -m http.server</code> dentro da pasta) ou selecione o CSV manualmente abaixo:</p>
+    <div class="file-row">
+      <input type="file" id="manual-file-input" accept=".csv">
+    </div>
+  </div>
+
+  <div class="filters card" id="filters">
+    <div class="filter-field">
+      <label>Período</label>
+      <div class="date-range">
+        <input type="date" id="f-from">
+        <span>até</span>
+        <input type="date" id="f-to">
+      </div>
+      <div class="preset-row" id="preset-row">
+        <button type="button" class="preset-btn" data-preset="yesterday">Ontem</button>
+        <button type="button" class="preset-btn" data-preset="7d">Últimos 7 dias</button>
+        <button type="button" class="preset-btn" data-preset="30d">Últimos 30 dias</button>
+        <button type="button" class="preset-btn" data-preset="month">Este mês</button>
+        <button type="button" class="preset-btn active" data-preset="all">Tudo</button>
+      </div>
+    </div>
+
+    <div class="filter-field">
+      <label>Template</label>
+      <div class="combo" id="template-combo">
+        <button class="combo-btn" id="template-btn" type="button">
+          <span id="template-btn-label">Todos os templates</span>
+          <span class="chev">▾</span>
+        </button>
+        <div class="combo-panel" id="template-panel">
+          <input class="combo-search" id="template-search" placeholder="Buscar template…">
+          <div class="combo-actions">
+            <button type="button" id="template-all">Selecionar todos</button>
+            <button type="button" id="template-none">Limpar</button>
+          </div>
+          <div id="template-options"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="filter-field" id="bot-field" style="display:none;">
+      <label>Bot</label>
+      <div class="combo" id="bot-combo">
+        <button class="combo-btn" id="bot-btn" type="button">
+          <span id="bot-btn-label">Todos os bots</span>
+          <span class="chev">▾</span>
+        </button>
+        <div class="combo-panel" id="bot-panel">
+          <div class="combo-actions">
+            <button type="button" id="bot-all">Selecionar todos</button>
+            <button type="button" id="bot-none">Limpar</button>
+          </div>
+          <div id="bot-options"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="filter-field">
+      <label>&nbsp;</label>
+      <button class="clear-btn" id="clear-filters" type="button">Limpar filtros</button>
+    </div>
+  </div>
+
+  <div class="kpi-row" id="kpi-row">
+    <div class="card kpi"><div class="kpi-label">Enviadas</div><div class="kpi-value">—</div><div class="kpi-sub">—</div></div>
+    <div class="card kpi"><div class="kpi-label">Recebidas</div><div class="kpi-value">—</div><div class="kpi-sub">—</div></div>
+    <div class="card kpi"><div class="kpi-label">Lidas</div><div class="kpi-value">—</div><div class="kpi-sub">—</div></div>
+    <div class="card kpi"><div class="kpi-label">Respondidas</div><div class="kpi-value">—</div><div class="kpi-sub">—</div></div>
+    <div class="card kpi is-fail"><div class="kpi-label">Falharam</div><div class="kpi-value">—</div><div class="kpi-sub">—</div></div>
+  </div>
+
+  <div class="section card">
+    <h2>Status das mensagens ativas</h2>
+    <p class="cap">Visão de funil do status das mensagens ativas enviadas</p>
+    <div id="funnel"></div>
+  </div>
+
+  <div class="section card">
+    <h2>Falhas no envio</h2>
+    <p class="cap">Principais erros que impediram a entrega</p>
+    <div id="err-table-wrap"></div>
+  </div>
+
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var DATA_URL = "data/notifications.csv";
+  var raw = [];               // all parsed rows
+  var templates = [];         // sorted unique template names
+  var bots = [];               // sorted unique bot ids
+  var selectedTemplates = new Set();
+  var selectedBots = new Set();
+  var minDate = null, maxDate = null;
+  var sortCol = "count", sortDir = "desc";
+  var page = 1, perPage = 5;
+
+  function $(id) { return document.getElementById(id); }
+  function fmtInt(n) { return n.toLocaleString("pt-BR"); }
+  function fmtPct(n) { return (Math.round(n * 10) / 10).toLocaleString("pt-BR", {minimumFractionDigits: n % 1 === 0 ? 0 : 1}) + "%"; }
+  function toISODate(d) {
+    var y = d.getFullYear(), m = String(d.getMonth()+1).padStart(2,"0"), day = String(d.getDate()).padStart(2,"0");
+    return y + "-" + m + "-" + day;
+  }
+  function parseISODate(s) { var p = s.split("-"); return new Date(+p[0], +p[1]-1, +p[2]); }
+  function addDays(d, n) { var r = new Date(d); r.setDate(r.getDate() + n); return r; }
+  function clampISO(iso) { return iso < minDate ? minDate : (iso > maxDate ? maxDate : iso); }
+
+  // Presets are anchored to the last date present in the data (not the real
+  // "today") since the Blip export itself is a snapshot up to a given day —
+  // that last day is effectively "ontem" relative to when the export was made.
+  function applyPreset(key) {
+    var maxD = parseISODate(maxDate);
+    var from, to = maxDate;
+    if (key === "yesterday") { from = maxDate; to = maxDate; }
+    else if (key === "7d") { from = clampISO(toISODate(addDays(maxD, -6))); }
+    else if (key === "30d") { from = clampISO(toISODate(addDays(maxD, -29))); }
+    else if (key === "month") { from = clampISO(toISODate(new Date(maxD.getFullYear(), maxD.getMonth(), 1))); }
+    else { from = minDate; to = maxDate; }
+    $("f-from").value = from;
+    $("f-to").value = to;
+    setActivePreset(key);
+    renderAll();
+  }
+
+  function setActivePreset(key) {
+    document.querySelectorAll(".preset-btn").forEach(function (b) {
+      b.classList.toggle("active", b.getAttribute("data-preset") === key);
+    });
+  }
+
+  function wirePresets() {
+    document.querySelectorAll(".preset-btn").forEach(function (b) {
+      b.addEventListener("click", function () { applyPreset(b.getAttribute("data-preset")); });
+    });
+  }
+
+  function onParsed(rows) {
+    raw = rows.filter(function (r) { return r.Data; });
+    $("load-banner").classList.remove("show");
+    init();
+  }
+
+  function showLoadBanner() {
+    $("meta-info").textContent = "Aguardando arquivo de dados…";
+    $("load-banner").classList.add("show");
+  }
+
+  function loadData() {
+    // file:// pages can't fetch() a local CSV (browsers block it) — skip straight to the fallback.
+    if (location.protocol === "file:") {
+      showLoadBanner();
+    } else {
+      Papa.parse(DATA_URL, {
+        download: true,
+        header: true,
+        skipEmptyLines: true,
+        complete: function (res) {
+          if (!res.data || res.data.length === 0) { showLoadBanner(); return; }
+          onParsed(res.data);
+        },
+        error: function () {
+          showLoadBanner();
+        }
+      });
+    }
+
+    $("manual-file-input").addEventListener("change", function (e) {
+      var file = e.target.files[0];
+      if (!file) return;
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        complete: function (res) { onParsed(res.data); },
+        error: function (err) {
+          alert("Não foi possível ler esse arquivo como CSV: " + err);
+        }
+      });
+    });
+  }
+
+  function init() {
+    var tSet = new Set(), bSet = new Set();
+    raw.forEach(function (r) {
+      if (r.TemplateName) tSet.add(r.TemplateName);
+      if (r.BotId) bSet.add(r.BotId);
+    });
+    templates = Array.from(tSet).sort();
+    bots = Array.from(bSet).sort();
+    selectedTemplates = new Set(templates);
+    selectedBots = new Set(bots);
+
+    var dates = raw.map(function (r) { return r.Data; }).sort();
+    minDate = dates[0];
+    maxDate = dates[dates.length - 1];
+    $("f-from").min = minDate; $("f-from").max = maxDate;
+    $("f-to").min = minDate; $("f-to").max = maxDate;
+    $("f-from").value = minDate;
+    $("f-to").value = maxDate;
+
+    if (bots.length > 1) $("bot-field").style.display = "";
+
+    buildCombo("template", templates, selectedTemplates, renderAll);
+    buildCombo("bot", bots, selectedBots, renderAll);
+
+    $("f-from").addEventListener("change", function () { setActivePreset(null); renderAll(); });
+    $("f-to").addEventListener("change", function () { setActivePreset(null); renderAll(); });
+    $("clear-filters").addEventListener("click", function () {
+      $("f-from").value = minDate;
+      $("f-to").value = maxDate;
+      selectedTemplates = new Set(templates);
+      selectedBots = new Set(bots);
+      buildCombo("template", templates, selectedTemplates, renderAll);
+      buildCombo("bot", bots, selectedBots, renderAll);
+      setActivePreset("all");
+      renderAll();
+    });
+
+    wirePresets();
+
+    $("meta-info").textContent = fmtInt(raw.length) + " registros carregados · período disponível " +
+      fmtDatePT(minDate) + " – " + fmtDatePT(maxDate);
+
+    renderAll();
+  }
+
+  function fmtDatePT(iso) {
+    var p = iso.split("-");
+    return p[2] + "/" + p[1] + "/" + p[0];
+  }
+
+  // ---- generic multi-select combo ----
+  function buildCombo(key, items, selectedSet, onChange) {
+    var optionsEl = $(key + "-options");
+    optionsEl.innerHTML = "";
+    var counts = {};
+    items.forEach(function (v) { counts[v] = raw.reduce(function (a, r) { return a + (r[key === "template" ? "TemplateName" : "BotId"] === v ? 1 : 0); }, 0); });
+
+    items.forEach(function (v) {
+      var row = document.createElement("label");
+      row.className = "combo-option";
+      var cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.checked = selectedSet.has(v);
+      cb.addEventListener("change", function () {
+        if (cb.checked) selectedSet.add(v); else selectedSet.delete(v);
+        updateComboLabel(key, items, selectedSet);
+        onChange();
+      });
+      var span = document.createElement("span");
+      span.textContent = v;
+      var count = document.createElement("span");
+      count.className = "count";
+      count.textContent = fmtInt(counts[v]);
+      row.appendChild(cb); row.appendChild(span); row.appendChild(count);
+      optionsEl.appendChild(row);
+    });
+
+    updateComboLabel(key, items, selectedSet);
+
+    var btn = $(key + "-btn"), panel = $(key + "-panel");
+    btn.onclick = function (e) {
+      e.stopPropagation();
+      document.querySelectorAll(".combo-panel.open").forEach(function (p) { if (p !== panel) p.classList.remove("open"); });
+      panel.classList.toggle("open");
+    };
+    document.addEventListener("click", function (e) {
+      if (!panel.contains(e.target) && e.target !== btn) panel.classList.remove("open");
+    });
+
+    $("template-all") && (key === "template") && ($("template-all").onclick = function () {
+      items.forEach(function (v) { selectedSet.add(v); });
+      buildCombo(key, items, selectedSet, onChange); onChange();
+    });
+    $("template-none") && (key === "template") && ($("template-none").onclick = function () {
+      selectedSet.clear();
+      buildCombo(key, items, selectedSet, onChange); onChange();
+    });
+    $("bot-all") && (key === "bot") && ($("bot-all").onclick = function () {
+      items.forEach(function (v) { selectedSet.add(v); });
+      buildCombo(key, items, selectedSet, onChange); onChange();
+    });
+    $("bot-none") && (key === "bot") && ($("bot-none").onclick = function () {
+      selectedSet.clear();
+      buildCombo(key, items, selectedSet, onChange); onChange();
+    });
+
+    if (key === "template") {
+      $("template-search").oninput = function () {
+        var q = this.value.toLowerCase();
+        optionsEl.querySelectorAll(".combo-option").forEach(function (row) {
+          row.style.display = row.textContent.toLowerCase().indexOf(q) >= 0 ? "" : "none";
+        });
+      };
+    }
+  }
+
+  function updateComboLabel(key, items, selectedSet) {
+    var labelEl = $(key + "-btn-label");
+    var noun = key === "template" ? "template" : "bot";
+    if (selectedSet.size === 0) labelEl.textContent = "Nenhum " + noun;
+    else if (selectedSet.size === items.length) labelEl.textContent = "Todos os " + noun + "s";
+    else labelEl.textContent = selectedSet.size + " " + noun + (selectedSet.size > 1 ? "s selecionados" : " selecionado");
+  }
+
+  // ---- filtering ----
+  function getFiltered(fromOverride, toOverride) {
+    var from = fromOverride || $("f-from").value;
+    var to = toOverride || $("f-to").value;
+    return raw.filter(function (r) {
+      if (r.Data < from || r.Data > to) return false;
+      if (r.TemplateName && !selectedTemplates.has(r.TemplateName)) return false;
+      if (r.BotId && !selectedBots.has(r.BotId)) return false;
+      return true;
+    });
+  }
+
+  function isSet(v) { return v !== undefined && v !== null && String(v).trim() !== ""; }
+
+  function computeFunnel(rows) {
+    var enviadas = rows.length;
+    var recebidas = rows.filter(function (r) { return isSet(r.Received); }).length;
+    var lidas = rows.filter(function (r) { return isSet(r.Consumed); }).length;
+    var respondidas = rows.filter(function (r) { return isSet(r.RespostaUsuario); }).length;
+    var falharam = rows.filter(function (r) { return isSet(r.Failed); }).length;
+    return { enviadas: enviadas, recebidas: recebidas, lidas: lidas, respondidas: respondidas, falharam: falharam };
+  }
+
+  function previousPeriodDelta() {
+    var from = parseISODate($("f-from").value), to = parseISODate($("f-to").value);
+    var days = Math.round((to - from) / 86400000) + 1;
+    var prevTo = new Date(from); prevTo.setDate(prevTo.getDate() - 1);
+    var prevFrom = new Date(prevTo); prevFrom.setDate(prevFrom.getDate() - (days - 1));
+    var prevRows = getFiltered(toISODate(prevFrom), toISODate(prevTo));
+    if (prevRows.length === 0) return null;
+    var current = getFiltered().length;
+    return ((current - prevRows.length) / prevRows.length) * 100;
+  }
+
+  function renderKPIs(f) {
+    var cards = document.querySelectorAll("#kpi-row .kpi");
+    var delta = previousPeriodDelta();
+
+    setKpi(cards[0], f.enviadas, delta === null ? "—" : (delta >= 0 ? "+" : "") + fmtPct(delta) + " vs período anterior", delta === null ? "" : (delta >= 0 ? "up" : "down"));
+    setKpi(cards[1], f.recebidas, fmtPct(f.enviadas ? f.recebidas / f.enviadas * 100 : 0) + " das enviadas");
+    setKpi(cards[2], f.lidas, fmtPct(f.recebidas ? f.lidas / f.recebidas * 100 : 0) + " das recebidas");
+    setKpi(cards[3], f.respondidas, fmtPct(f.lidas ? f.respondidas / f.lidas * 100 : 0) + " das lidas");
+    setKpi(cards[4], f.falharam, fmtPct(f.enviadas ? f.falharam / f.enviadas * 100 : 0) + " das enviadas");
+  }
+  function setKpi(card, value, sub, subClass) {
+    card.querySelector(".kpi-value").textContent = fmtInt(value);
+    var subEl = card.querySelector(".kpi-sub");
+    subEl.textContent = sub;
+    subEl.className = "kpi-sub" + (subClass ? " " + subClass : "");
+  }
+
+  function renderFunnel(f) {
+    var stages = [
+      { label: "Enviadas", value: f.enviadas },
+      { label: "Recebidas", value: f.recebidas },
+      { label: "Lidas", value: f.lidas },
+      { label: "Respondidas", value: f.respondidas }
+    ];
+    var max = stages[0].value || 1;
+    var el = $("funnel");
+    el.innerHTML = "";
+    stages.forEach(function (s) {
+      var row = document.createElement("div");
+      row.className = "funnel-row";
+      var pct = max ? (s.value / max * 100) : 0;
+      row.innerHTML =
+        '<div class="stage-label">' + s.label + '</div>' +
+        '<div class="funnel-track"><div class="funnel-bar" style="width:' + pct + '%">' + fmtInt(s.value) + '</div></div>';
+      el.appendChild(row);
+    });
+  }
+
+  function parseFailure(text) {
+    var idx = text.indexOf(" - ");
+    if (idx === -1) return { code: "—", desc: text };
+    return { code: text.slice(0, idx).trim(), desc: text.slice(idx + 3).trim() };
+  }
+
+  function renderErrorTable(rows) {
+    var failedRows = rows.filter(function (r) { return isSet(r.Failed); });
+    var total = failedRows.length;
+    var groups = {};
+    failedRows.forEach(function (r) {
+      var parsed = parseFailure(String(r.Failed));
+      var key = parsed.code + "||" + parsed.desc;
+      if (!groups[key]) groups[key] = { code: parsed.code, desc: parsed.desc, count: 0 };
+      groups[key].count++;
+    });
+    var list = Object.keys(groups).map(function (k) {
+      var g = groups[k];
+      g.pct = total ? g.count / total * 100 : 0;
+      return g;
+    });
+
+    list.sort(function (a, b) {
+      var dir = sortDir === "asc" ? 1 : -1;
+      if (sortCol === "code") return a.code.localeCompare(b.code) * dir;
+      if (sortCol === "desc") return a.desc.localeCompare(b.desc) * dir;
+      return (a.count - b.count) * dir;
+    });
+
+    var wrap = $("err-table-wrap");
+    if (list.length === 0) {
+      wrap.innerHTML = '<div class="empty-state">Nenhuma falha encontrada para os filtros selecionados.</div>';
+      return;
+    }
+
+    var totalItems = list.length;
+    var totalPages = Math.max(1, Math.ceil(totalItems / perPage));
+    if (page > totalPages) page = totalPages;
+    var startIdx = (page - 1) * perPage;
+    var pageItems = list.slice(startIdx, startIdx + perPage);
+
+    var arrow = function (col) { return sortCol === col ? (sortDir === "asc" ? "▲" : "▼") : ""; };
+
+    var html = '<table class="err-table"><thead><tr>' +
+      '<th data-col="code">Código <span class="arrow">' + arrow("code") + '</span></th>' +
+      '<th data-col="desc">Descrição <span class="arrow">' + arrow("desc") + '</span></th>' +
+      '<th data-col="count" style="text-align:right">Ocorrência <span class="arrow">' + arrow("count") + '</span></th>' +
+      '<th style="text-align:right">% sobre total</th>' +
+      '</tr></thead><tbody>';
+
+    pageItems.forEach(function (g) {
+      var dotClass = g.pct >= 10 ? "crit" : "muted";
+      html += '<tr>' +
+        '<td class="num" style="text-align:left">' + escapeHtml(g.code) + '</td>' +
+        '<td class="desc">' + escapeHtml(g.desc) + '</td>' +
+        '<td class="num">' + fmtInt(g.count) + '</td>' +
+        '<td class="num"><div class="pct-cell"><span class="dot ' + dotClass + '"></span>' + fmtPct(g.pct) + '</div></td>' +
+        '</tr>';
+    });
+    html += '</tbody></table>';
+
+    html += '<div class="table-foot">' +
+      '<div class="per-page">Itens por página: ' +
+        '<select id="per-page-select">' +
+          [5, 10, 25].map(function (n) { return '<option value="' + n + '"' + (n === perPage ? " selected" : "") + '>' + n + '</option>'; }).join("") +
+        '</select>' +
+      '</div>' +
+      '<div class="range-info">' + (startIdx + 1) + '-' + Math.min(startIdx + perPage, totalItems) + ' de ' + totalItems + ' itens</div>' +
+      '<div class="pager">' +
+        '<button id="pg-prev" ' + (page === 1 ? "disabled" : "") + '>‹</button>' +
+        '<button id="pg-next" ' + (page === totalPages ? "disabled" : "") + '>›</button>' +
+      '</div>' +
+    '</div>';
+
+    wrap.innerHTML = html;
+
+    wrap.querySelectorAll("th[data-col]").forEach(function (th) {
+      th.addEventListener("click", function () {
+        var col = th.getAttribute("data-col");
+        if (sortCol === col) sortDir = sortDir === "asc" ? "desc" : "asc";
+        else { sortCol = col; sortDir = "desc"; }
+        renderErrorTable(getFiltered());
+      });
+    });
+    $("per-page-select").addEventListener("change", function () {
+      perPage = parseInt(this.value, 10); page = 1;
+      renderErrorTable(getFiltered());
+    });
+    var prevBtn = $("pg-prev"), nextBtn = $("pg-next");
+    if (prevBtn) prevBtn.addEventListener("click", function () { page--; renderErrorTable(getFiltered()); });
+    if (nextBtn) nextBtn.addEventListener("click", function () { page++; renderErrorTable(getFiltered()); });
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  function renderAll() {
+    var rows = getFiltered();
+    if (rows.length === 0) {
+      $("kpi-row").querySelectorAll(".kpi-value").forEach(function (e) { e.textContent = "0"; });
+      $("kpi-row").querySelectorAll(".kpi-sub").forEach(function (e) { e.textContent = "—"; });
+      $("funnel").innerHTML = '<div class="empty-state">Nenhum dado encontrado para os filtros selecionados.</div>';
+      $("err-table-wrap").innerHTML = '<div class="empty-state">Nenhum dado encontrado para os filtros selecionados.</div>';
+      return;
+    }
+    var f = computeFunnel(rows);
+    renderKPIs(f);
+    renderFunnel(f);
+    page = 1;
+    renderErrorTable(rows);
+  }
+
+  loadData();
+})();
+</script>
+</body>
+</html>
